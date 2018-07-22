@@ -40,8 +40,8 @@ enable_efficient_handling = true;
 % Truth table
 % enable_intelligent_SON, enable_efficient_handling
 % F, F = Random
-% F, T = FCFS
-% T, F = DQN 
+% F, T = Oracle
+% T, F = DQN-Proposed
 % T, T = unused.
 
 global reward;
