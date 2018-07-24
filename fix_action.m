@@ -10,9 +10,9 @@ function cleared = fix_action(eNodeBs, serv_cell, neigh_cell, action)
          % do nothing.
        % fprintf('(no action taken).\n')
     elseif (action == 2) && (alarm_register(2) == 1)
-            if (eNodeBs(neigh_cell).max_power == 0) && (eNodeBs(neigh_cell).always_on == 0)
+            if (eNodeBs(neigh_cell).max_power == -inf) %(eNodeBs(neigh_cell).always_on == 0) %|| 
                 eNodeBs(neigh_cell).max_power = 10^(46/10)/1000; % 46 dBm in Watts -- cell is back on again        
-                eNodeBs(neigh_cell).always_on = 1;
+                %eNodeBs(neigh_cell).always_on = 1;
                 fprintf('CLEARED: Neighbor cell %d is up again.\n', neigh_cell)
                 cell_down_register(neigh_cell) = 0;                
                 if (sum(cell_down_register) == 0)

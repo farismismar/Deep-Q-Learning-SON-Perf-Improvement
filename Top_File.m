@@ -33,7 +33,7 @@ startTime = tic;
 
 Total_Time = 50; % TTIs
 live_network_alarms = true; % yes generate alarms in the network
-q = 50; % UEs per cell
+q = 10; % UEs per cell
 enable_intelligent_SON = false; 
 enable_efficient_handling = true;
 
@@ -41,7 +41,7 @@ enable_efficient_handling = true;
 % enable_intelligent_SON, enable_efficient_handling
 % F, F = Random
 % F, T = Oracle
-% T, F = DQN-Proposed
+% T, F = DQN 
 % T, T = unused.
 
 global reward;
@@ -73,7 +73,6 @@ rng(seed,'twister');
 
 simulation_type = 'tri_sector_tilted_4x2';
 
-
 LTE_config = LTE_load_params(simulation_type);
 %% If you want to modify something taking as a base the configuration file, do it here: here an example is show that changes the inter-eNodeB distances based on the LTE_load_params_hex_grid_tilted config file.
 
@@ -104,7 +103,7 @@ LTE_config.eNodeB_tx_power            = 10^((46-30)/10); % 46 dBm for macro
 LTE_config.site_altiude               = 0;  % average terrain height 
 LTE_config.site_height                = 25; % site height above terrain
 LTE_config.rx_height                  = 1.5; % UE is at 1.5 meters
-LTE_config.antenna_gain_pattern       = 'TS 36.942';
+LTE_config.antenna_gain_pattern       = 'TS 36.942'; % check this? kathreinTSAntenna
 %LTE_config.sector_azimuths            = [30 150 270];
 LTE_config.antenna.electrical_downtilt= 4;
 LTE_config.max_antenna_gain           = 17; % 17 dB

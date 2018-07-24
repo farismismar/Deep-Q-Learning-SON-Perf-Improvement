@@ -387,8 +387,8 @@ else
     network_data.x5 = [];
     network_data.x6 = [];
     network_data.x7 = [];
-    action__ = 0;
-    neigh_cell = 0;
+    %action__ = 0;
+    %neigh_cell = 0;
     % end Faris code
     
     % Network clock is initialised to 0
@@ -447,9 +447,9 @@ else
 %         dlmwrite('network_data.csv', X, '-append');      
         
         if (live_network_alarms)
-            serv_cell = 5; % is the serving cell with pos = 0,0.
-            neigh_cell = randsample(setdiff(1:21,serv_cell),1);
             if mod(networkClock.current_TTI,2) == 1
+                serv_cell = 5; % is the serving cell with pos = 0,0.
+                neigh_cell = randsample(setdiff(1:21,serv_cell),1);
                 % Network (Player A) plays an action at random
                 % c_ is the counter for cells
                 prob_action = randi([1,9]);         
@@ -460,9 +460,9 @@ else
                     action__ = 1; % this variable contains the corrective action
                     alarm_register(action__) = 0; % always
                 elseif prob_action == 6 && cell_down_register(neigh_cell) ~= 1
-                    if (eNodeBs(neigh_cell).max_power ~= 0)
-                        eNodeBs(neigh_cell).max_power = 0; % W -- cell is off.        
-                        eNodeBs(neigh_cell).always_on = 0;
+                    if (eNodeBs(neigh_cell).max_power ~= -inf) %|| (eNodeBs(neigh_cell).always_on == 1)
+                        eNodeBs(neigh_cell).max_power = -inf; % W -- cell is off.        
+                        %eNodeBs(neigh_cell).always_on = 0;
                         fprintf('ALARM: Neighbor cell %d is down.\n', neigh_cell)
                         action__ = 2;
                         alarm_register(action__) = 1;
@@ -555,10 +555,9 @@ else
                     fix_action(eNodeBs, serv_cell, neigh_cell, action__);
                 else % this is the total randomness
                     % Random algorithm: Fix actions at random only if they occurred
-                    rand_action = randi([0,5]);
+                    rand_action = randi([1,5]);
                     rand_neighbor = randi([1,21]);
-                    rand_serving = 5;
-                    fix_action(eNodeBs, rand_serving, rand_neighbor, rand_action);
+                    fix_action(eNodeBs, serv_cell, rand_neighbor, rand_action);
                 end
             end
         end    
