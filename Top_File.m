@@ -23,7 +23,7 @@ clear global;
 clear classes;
 
 global enable_intelligent_SON;
-global enable_efficient_handling;
+global enable_fifo_handling;
 %global network_data;
 global Total_Time;
 global q;
@@ -31,16 +31,16 @@ global live_network_alarms;
 
 startTime = tic;
 
-Total_Time = 50; % TTIs
+Total_Time = 20; % TTIs
 live_network_alarms = true; % yes generate alarms in the network
-q = 10; % UEs per cell
+q = 5; % UEs per cell
 enable_intelligent_SON = false; 
-enable_efficient_handling = true;
+enable_fifo_handling = false;
 
 % Truth table
-% enable_intelligent_SON, enable_efficient_handling
-% F, F = Random
-% F, T = Oracle
+% enable_intelligent_SON, enable_fifo_handling
+% F, F = Random  
+% F, T = FIFO  
 % T, F = DQN 
 % T, T = unused.
 
@@ -52,6 +52,7 @@ global action;
 global Actions;
 global alarm_register;
 global cell_down_register;
+global EPISODE_MAX;
 
 % Environment entry parameters
 state_size = 3;
@@ -61,7 +62,7 @@ alarm_register = [0,0,0,0,0];
 R_max = 5;
 R_min = -100;
 
-EPISODE_MAX = 150;  % do not change to less.  0.01 will not be achieved.
+EPISODE_MAX = 50;  % do not change to less.  0.01 will not be achieved.
 
 mod = py.importlib.import_module('main'); % a pointer to main.py
 py.importlib.reload(mod);
@@ -81,7 +82,7 @@ LTE_config.debug_level                = 1; % basic output.
 LTE_config.bandwidth                  = 10e6; % 10 MHz
 LTE_config.frequency                  = 2.1e9; % 2.1 GHz
 LTE_config.channel_model.type         = 'PedA';
-LTE_config.use_fast_fading            = true;
+LTE_config.use_fast_fading            = false;
 LTE_config.show_network               = 3; % show plots - Everything
 LTE_config.nTX                        = 2;
 LTE_config.nRX                        = 2; 
@@ -99,7 +100,7 @@ LTE_config.macroscopic_pathloss_model_settings.environment = 'urban_macro'; %for
 LTE_config.shadow_fading_type         = 'claussen';
 LTE_config.shadow_fading_mean         = 0;
 LTE_config.shadow_fading_sd           = 8; % 8 dB
-LTE_config.eNodeB_tx_power            = 10^((46-30)/10); % 46 dBm for macro
+LTE_config.eNodeB_tx_power            = 40; % 40W for macro
 LTE_config.site_altiude               = 0;  % average terrain height 
 LTE_config.site_height                = 25; % site height above terrain
 LTE_config.rx_height                  = 1.5; % UE is at 1.5 meters
@@ -108,7 +109,7 @@ LTE_config.antenna_gain_pattern       = 'TS 36.942'; % check this? kathreinTSAnt
 LTE_config.antenna.electrical_downtilt= 4;
 LTE_config.max_antenna_gain           = 17; % 17 dB
 LTE_config.UE.thermal_noise_density   = -174; % dBm/Hz
-LTE_config.cache_network              = false;
+LTE_config.cache_network              = true;
 LTE_config.antenna.antenna_type = '742212';
 LTE_config.antenna.frequency = 2140;
                 
@@ -127,7 +128,7 @@ LTE_config.UE.nRX                     = 2;  % Number of receive branches
 LTE_config.UE.receiver_noise_figure   = 7; % 7dB
 %LTE_config.UE_cache_file              = 'auto';
 LTE_config.adaptive_RI                = 0;
-LTE_config.keep_UEs_still             = false;
+LTE_config.keep_UEs_still             = true;
 LTE_config.UE_per_eNodeB              = q; % Number of UEs per cell.
 LTE_config.UE_speed                   = 3/3.6; % Speed at which the UEs move. In meters/second: 5 Km/h = 1.38 m/s
 LTE_config.map_resolution             = 5;  % 1 is the highest resolution.
@@ -142,24 +143,24 @@ for fn = fieldnames(LTE_config)'
     LTE_config_reset.(fn{1}) = LTE_config.(fn{1});
 end
 
-if enable_intelligent_SON == true && enable_efficient_handling == false
+
+if enable_intelligent_SON == true && enable_fifo_handling == false
     py.main.set_environment(state_size,action_size)
-    
+    losses = [];
     for episode_ = 1:EPISODE_MAX
         py.main.env_reset_wrapper();
         
         epsilon = py.main.agent_get_exploration_rate_wrapper();
         fprintf('Episode %d/%d.  Current epislon value is %3f:\n', episode_, EPISODE_MAX, epsilon);
     
+        % Start afresh...
         alarm_register = [0,0,0,0,0];
         state = zeros(1,state_size);
-        for fn = fieldnames(LTE_config)'
-            %LTE_config = LTE_config_reset; % reload the network settings
-            %afresh. (did not work)
-            LTE_config.(fn{1}) = LTE_config_reset.(fn{1}); % reload the network settings afresh.
-        end
+      %  for fn = fieldnames(LTE_config)' % https://www.mathworks.com/matlabcentral/answers/229604-how-to-copy-field-contents-of-one-struct-to-another
+      %      LTE_config.(fn{1}) = LTE_config_reset.(fn{1}); % reload the network settings afresh.
+       % end
 
-        reward = R_min;
+        %reward = R_min;
         action = py.main.agent_begin_episode_wrapper(state);  % is always 0
         
         Actions = [0]; %zeros(1,action_size);
@@ -173,14 +174,17 @@ if enable_intelligent_SON == true && enable_efficient_handling == false
             losses = cell2mat(cell(losses));
             disp(losses)
         end
-        close all
+        
+        close all;
         fprintf('The list of actions for episode %d:\n', episode_);
         disp(Actions)
         filename = sprintf('actions_episode_%d.csv',episode_);
         csvwrite(filename,Actions)
     end
     
-    dlmwrite('loss_opt_episode.csv', losses, '-append'); 
+    if numel(losses) > 0
+        dlmwrite('loss_opt_episode.csv', losses, '-append'); 
+    end
 else
     output_results_file = LTE_sim_main(LTE_config); % This is the main line... do not re run it unless you know what you are doing.
 end
@@ -198,9 +202,6 @@ GUI_handles.aggregate_results_GUI = LTE_GUI_show_aggregate_results(simulation_da
 GUI_handles.positions_GUI         = LTE_GUI_show_UEs_and_cells(simulation_data,GUI_handles.aggregate_results_GUI);
 
 % Generate the plot
-
-
-
 
 % Save this data somewhere
 %figure(1000)
