@@ -23,7 +23,7 @@ clear global;
 clear classes;
 
 global enable_intelligent_SON;
-global enable_fifo_handling;
+global enable_oracle_handling;
 %global network_data;
 global Total_Time;
 global q;
@@ -33,14 +33,14 @@ startTime = tic;
 
 Total_Time = 20; % TTIs
 live_network_alarms = true; % yes generate alarms in the network
-q = 5; % UEs per cell
+q = 30; % UEs per cell
 enable_intelligent_SON = false; 
-enable_fifo_handling = false;
+enable_oracle_handling = true;
 
 % Truth table
-% enable_intelligent_SON, enable_fifo_handling
+% enable_intelligent_SON, enable_oracle_handling
 % F, F = Random  
-% F, T = FIFO  
+% F, T = oracle  
 % T, F = DQN 
 % T, T = unused.
 
@@ -84,6 +84,7 @@ LTE_config.frequency                  = 2.1e9; % 2.1 GHz
 LTE_config.channel_model.type         = 'PedA';
 LTE_config.use_fast_fading            = false;
 LTE_config.show_network               = 3; % show plots - Everything
+%LTE_config.feedback_channel_delay     = 0;  % see if this helps in computing the SINR.
 LTE_config.nTX                        = 2;
 LTE_config.nRX                        = 2; 
 LTE_config.tx_mode                    = 4;  % 4 = CLSM
@@ -144,7 +145,7 @@ for fn = fieldnames(LTE_config)'
 end
 
 
-if enable_intelligent_SON == true && enable_fifo_handling == false
+if enable_intelligent_SON == true && enable_oracle_handling == false
     py.main.set_environment(state_size,action_size)
     losses = [];
     for episode_ = 1:EPISODE_MAX

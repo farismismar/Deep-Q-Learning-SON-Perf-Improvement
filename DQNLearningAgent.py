@@ -27,7 +27,7 @@ class DQNLearningAgent:
                  learning_rate=0.2,
                  discount_factor=1.0,
                  exploration_rate=1.0,
-                 exploration_decay_rate=0.97, batch_size=32,
+                 exploration_decay_rate=0.91, batch_size=32,
                  state_size=5, action_size=3):
 
         self.learning_rate = learning_rate          # alpha
