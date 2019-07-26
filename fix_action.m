@@ -1,54 +1,49 @@
-function cleared = fix_action(eNodeBs, serv_cell, neigh_cell, action)
+function cleared = fix_action(eNodeBs, serv_cell, action)
 
     global alarm_register
-    global cell_down_register
-    
-    fprintf('DEBUG: Action chosen is %d.  ', action)
+       
+    %fprintf('DEBUG: Action chosen is %d.', action)
    
     cleared = false;
-    if (action <= 1)
+    if (action == 0)
          % do nothing.
        % fprintf('(no action taken).\n')
-    elseif (action == 2) && (alarm_register(2) == 1)
-            if (eNodeBs(neigh_cell).always_on == 0) %(eNodeBs(neigh_cell).max_power == -inf) % %||  
-                eNodeBs(neigh_cell).max_power = 10^((46-30)/10); % 46 dBm in Watts -- cell is back on again
-                % reschedule users
-                eNodeBs(neigh_cell).always_on = 1;
-                fprintf('CLEARED: Neighbor cell %d is up again.\n', neigh_cell)
-                cell_down_register(neigh_cell) = 0;                
-                if (sum(cell_down_register) == 0)
-                    alarm_register(2) = 0; 
-                    cleared = true;
-                end
-            else
-                %fprintf('(network status is unchanged)\n')
+    elseif (action == 1) && (alarm_register(1) > 0)
+         if (eNodeBs(serv_cell).max_power ~= 40)
+            eNodeBs(serv_cell).max_power = 40; % removed 3 dB loss of sig
+            fprintf('CLEARED: Cell %d alarm loss of signal normal.\n', serv_cell)
+            cleared = true;
+            alarm_register(1) = min(0, alarm_register(1) - 1);
+         end
+    elseif (action == 2) && (alarm_register(2) > 0)
+        % find the correct azimuth
+        azimuths = [30, 150, 270];
+        corr_azimuth = azimuths(serv_cell - 12); % since we are doing cells 13, 14, 15.
+        if (eNodeBs(serv_cell).azimuth ~= corr_azimuth)
+            eNodeBs(serv_cell).azimuth = corr_azimuth;
+            fprintf('CLEARED: Cell %d azimuth has changed back to %d.\n', serv_cell, corr_azimuth)
+            cleared = true;
+            alarm_register(2) = min(0, alarm_register(2) - 1);
+        end
+    elseif (action == 3) && (alarm_register(3) > 0)
+           if (eNodeBs(serv_cell).electrical_downtilt == 8)
+                eNodeBs(serv_cell).electrical_downtilt = 4;
+                fprintf('CLEARED: Cell %d tilt has changed back to 4 degrees.\n', serv_cell)
+                cleared = true;
+                alarm_register(3) = min(0, alarm_register(3) - 1);  
+           end
+    elseif (action == 4) && (alarm_register(4) > 0)
+            if (eNodeBs(serv_cell).max_power ~= 37)
+                eNodeBs(serv_cell).max_power = 37; % recovered
+                fprintf('CLEARED: Cell %d amplifier overpower alarm 3 dB.\n', serv_cell)
+                cleared = true;
+                alarm_register(4) = min(0, alarm_register(4) - 1);
             end
-    elseif (action == 3) && (alarm_register(3) == 1)
+    elseif (action == 5) && (alarm_register(5) > 0)
             if (eNodeBs(serv_cell).total_nTX == 1)
-                eNodeBs(serv_cell).total_nTX = 2; % the cell is configured for transmit div
-                fprintf('CLEARED: Serving cell transmit diversity enabled.\n')
+                eNodeBs(serv_cell).total_nTX = 2; % the cell is not configured for transmit div
+                fprintf('CLEARED: Cell %d transmit diversity enabled.\n', serv_cell)
                 cleared = true;
-                alarm_register(3) = 0;
-            else
-                %fprintf('(network status is unchanged)\n')
-            end
-    elseif (action == 4) && (alarm_register(4) == 1)
-            if (eNodeBs(serv_cell).antenna.max_antenna_gain ~= 17)
-                eNodeBs(serv_cell).antenna.max_antenna_gain = 17; 
-                fprintf('CLEARED: Serving cell losses recovered.\n')
-                cleared = true;
-                alarm_register(4) = 0;
-            else
-                %fprintf('(network status is unchanged)\n')
-            end                            
-    elseif (action == 5) && (alarm_register(5) == 1)
-            if (eNodeBs(serv_cell).azimuth ~= 150)
-                eNodeBs(serv_cell).azimuth = 150;  % changed azimuth back to default
-                fprintf('CLEARED: Serving cell azimuth change recovered from wind back to 150.\n')
-                cleared = true;
-                alarm_register(5) = 0;
-            else
-               % fprintf('(network status is unchanged)\n')
+                alarm_register(5) = min(0, alarm_register(5) - 1);
             end
     end
-end

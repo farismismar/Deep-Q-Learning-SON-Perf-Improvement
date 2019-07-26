@@ -16,6 +16,15 @@
 % you need to install from gcc).
 % The core is 13 files that are different from the LTE-A sim.
 
+% Note if trying tensorflow and failing with this error:
+% Error using pywrap_tensorflow><module> (line 74)
+% Then run MATLAB from Terminal.
+% /Applications/MATLAB_R2018a.app/bin/matlab
+
+% First time run the random algorithm.  Do not start by running the
+% intelligent SON.
+% Change folder do not add to path.
+
 close all force;
 clc;
 clear all
@@ -23,53 +32,59 @@ clear global;
 clear classes;
 
 global enable_intelligent_SON;
-global enable_fifo_handling;
-%global network_data;
+global enable_fcfs_handling;
 global Total_Time;
 global q;
 global live_network_alarms;
 
 startTime = tic;
 
-Total_Time = 50; % TTIs
+Total_Time = 20; % TTIs
 live_network_alarms = true; % yes generate alarms in the network
-q = 5; % UEs per cell
-enable_intelligent_SON = true; 
-enable_fifo_handling = false;
+
+q = 10; % UEs per cell
+enable_intelligent_SON = true;
+enable_fcfs_handling = false;
 
 % Truth table
-% enable_intelligent_SON, enable_fifo_handling
+% enable_intelligent_SON, enable_fcfs_handling
 % F, F = Random  
-% F, T = FIFO  
+% F, T = FCFS  /  FIFO
 % T, F = DQN 
-% T, T = unused.
+% T, T = unused will yield error.
 
-global reward;
+global total_reward;
 global R_min;
 global R_max;
 global state;
 global action;
-global Actions;
+global Actions
+global Rewards
+global Alarms
 global alarm_register;
-global cell_down_register;
+global state_size;
+global action_size;
+global Q_value
+global losses
+    
 global EPISODE_MAX;
 
 % Environment entry parameters
 state_size = 3;
-action_size = 5;
-alarm_register = [0,0,0,0,0];
+action_size = 6;
+alarm_register = zeros(1,action_size);
 
 R_max = 5;
-R_min = -100;
+R_min = -2;
 
-EPISODE_MAX = 50;  % do not change to less.  0.01 will not be achieved.
+EPISODE_MAX = 10000;  % do not change to less.  0.01 will not be achieved.
 
 mod = py.importlib.import_module('main'); % a pointer to main.py
 py.importlib.reload(mod);
 
 py.importlib.import_module('os');
 
-seed = 3; % also change in main.py
+seed = 0; % also change in main.py
 rng(seed,'twister');
 
 simulation_type = 'tri_sector_tilted_4x2';
@@ -83,7 +98,8 @@ LTE_config.bandwidth                  = 10e6; % 10 MHz
 LTE_config.frequency                  = 2.1e9; % 2.1 GHz
 LTE_config.channel_model.type         = 'PedA';
 LTE_config.use_fast_fading            = false;
-LTE_config.show_network               = 3; % show plots - Everything
+LTE_config.show_network               = 0; % do not show plots - Everything
+LTE_config.feedback_channel_delay     = 1;  % see if this helps in computing the SINR.
 LTE_config.nTX                        = 2;
 LTE_config.nRX                        = 2; 
 LTE_config.tx_mode                    = 4;  % 4 = CLSM
@@ -104,8 +120,7 @@ LTE_config.eNodeB_tx_power            = 40; % 40W for macro
 LTE_config.site_altiude               = 0;  % average terrain height 
 LTE_config.site_height                = 25; % site height above terrain
 LTE_config.rx_height                  = 1.5; % UE is at 1.5 meters
-LTE_config.antenna_gain_pattern       = 'TS 36.942'; % check this? kathreinTSAntenna
-%LTE_config.sector_azimuths            = [30 150 270];
+LTE_config.antenna_gain_pattern       = 'TS 36.942'; 
 LTE_config.antenna.electrical_downtilt= 4;
 LTE_config.max_antenna_gain           = 17; % 17 dB
 LTE_config.UE.thermal_noise_density   = -174; % dBm/Hz
@@ -113,13 +128,6 @@ LTE_config.cache_network              = true;
 LTE_config.antenna.antenna_type = '742212';
 LTE_config.antenna.frequency = 2140;
                 
-% % Small cell layer
-% LTE_config.add_femtocells             = true;  % femto but configured as a pico with power
-% LTE_config.femtocells_config.tx_power_W = 10^((37-30)/10); % 37 dBm is 5W.
-% LTE_config.femtocells_config.spatial_distribution = 'homogenous density';
-% LTE_config.femtocells_config.femtocells_per_km2 = 3; %50; % 3 for case 1 and 50 for case 2
-% %LTE_config.femtocells_config.macroscopic_pathloss_model = 'cost231'; % 'dual slope'
-
 LTE_config.compact_results_file       = true;
 LTE_config.delete_ff_trace_at_end     = true;
 LTE_config.UE_cache                   = false;
@@ -143,10 +151,12 @@ for fn = fieldnames(LTE_config)'
     LTE_config_reset.(fn{1}) = LTE_config.(fn{1});
 end
 
-
-if enable_intelligent_SON == true && enable_fifo_handling == false
+if enable_intelligent_SON == true && enable_fcfs_handling == false
     py.main.set_environment(state_size,action_size)
     losses = [];
+    Q_value = [];
+    best_episode = 0;
+    best_reward = -1;
     for episode_ = 1:EPISODE_MAX
         py.main.env_reset_wrapper();
         
@@ -154,36 +164,73 @@ if enable_intelligent_SON == true && enable_fifo_handling == false
         fprintf('Episode %d/%d.  Current epislon value is %3f:\n', episode_, EPISODE_MAX, epsilon);
     
         % Start afresh...
-        alarm_register = [0,0,0,0,0];
+        % This is env.reset()
+        alarm_register = zeros(1,action_size);
         state = zeros(1,state_size);
-      %  for fn = fieldnames(LTE_config)' % https://www.mathworks.com/matlabcentral/answers/229604-how-to-copy-field-contents-of-one-struct-to-another
-      %      LTE_config.(fn{1}) = LTE_config_reset.(fn{1}); % reload the network settings afresh.
-       % end
-
-        %reward = R_min;
-        action = py.main.agent_begin_episode_wrapper(state);  % is always 0
+        total_reward = 0;
+        Alarms = [];
+        losses = [];
+        Q_value = [];
         
-        Actions = [0]; %zeros(1,action_size);
-        output_results_file = LTE_sim_main(LTE_config);
+        action = -1;
+        Actions = [action]; %zeros(1,action_size);
+        Rewards = [0];
         
-        % train the agent with the experience of the episode
-        if py.main.agent_memory_length_diff_wrapper() > 0
-            py.main.agent_replay_wrapper();
-            % Show the losses for this episode here
-            losses = py.main.agent_get_losses_wrapper();
-            losses = cell2mat(cell(losses));
-            disp(losses)
+        py.main.agent_begin_episode_wrapper(state);  % is always 0
+        
+        output_results_file = LTE_sim_main(LTE_config); % This interacts with the  env
+        successful = (sum(alarm_register) == 0);
+        if successful
+            total_reward = Rewards(end);
+            total_reward = total_reward + R_max;
+        end
+        Rewards = [Rewards(1:end-1), total_reward];
+        
+        if (total_reward > best_reward)
+            best_episode = episode_;
+            best_reward = total_reward;
+        end
+        %close all;
+        fprintf('The list of actions/rewards for episode %d:\n', episode_);
+        fprintf('Actions: ')
+        fprintf('%d,', Actions)
+        fprintf('\n');
+        fprintf('Rewards: ')
+        fprintf('%d,', Rewards)
+        fprintf('\n');
+        fprintf('Count of unresolved alarms: ')
+        fprintf('%d,', Alarms)
+        
+        loss_z = mean(losses);
+        q_z = mean(Q_value);
+        fprintf('\n\n');
+        fprintf('The loss in this episode was %3f.\n', loss_z);
+        fprintf('The Q-value in this episode was %3f.\n', q_z);
+        
+        fid = fopen(sprintf('actions_episode_%d.csv',episode_), 'wt');
+        if fid ~= -1
+            fprintf(fid, 'Episode:,%d', episode_);
+            fprintf(fid, '\nActions:,');
+            fprintf(fid, '%d,', Actions);
+            fprintf(fid, '\nRewards:,');
+            fprintf(fid, '%d,', Rewards);
+            fprintf(fid, '\nLosses:,');
+            fprintf(fid, '%5f,', losses);
+            fprintf(fid, '\nQ-value:,');
+            fprintf(fid, '%5f,', Q_value);
+            fclose(fid);
         end
         
-        close all;
-        fprintf('The list of actions for episode %d:\n', episode_);
-        disp(Actions)
-        filename = sprintf('actions_episode_%d.csv',episode_);
-        csvwrite(filename,Actions)
-    end
+        if (sum(Alarms) == 0) || isnan(loss_z)
+            break
+        end
+    end 
     
-    if numel(losses) > 0
-        dlmwrite('loss_opt_episode.csv', losses, '-append'); 
+    fid = fopen('best_episode.csv', 'wt');
+    if fid ~= -1
+        fprintf(fid, 'Best episode:, %d\n', best_episode);
+        fprintf(fid, 'Best reward:, %6f\n', total_reward);
+        fclose(fid);
     end
 else
     output_results_file = LTE_sim_main(LTE_config); % This is the main line... do not re run it unless you know what you are doing.
@@ -191,24 +238,11 @@ end
 
 %%%%%%%%%%%%%
 simulation_data                   = load(output_results_file);
+% TODO: Try to find where the throughput and the SE CDF is and port it here.
 
-% Manually place sites
-%simulation_data.sites(1).pos      = [0 0];  % Macro
-%simulation_data.sites(2).pos      = [cos(2*pi/3) sin(2*pi/3)] * LTE_config.inter_eNodeB_distance;
-%simulation_data.sites(3).pos      = [cos(240*pi/180) sin(240*pi/180)] * LTE_config.inter_eNodeB_distance;
-%simulation_data.sites(4).pos      = [cos(360*pi/180) sin(360*pi/180)] * LTE_config.inter_eNodeB_distance;
 close all
 GUI_handles.aggregate_results_GUI = LTE_GUI_show_aggregate_results(simulation_data);
 GUI_handles.positions_GUI         = LTE_GUI_show_UEs_and_cells(simulation_data,GUI_handles.aggregate_results_GUI);
-
-% Generate the plot
-
-% Save this data somewhere
-%figure(1000)
-%plot(0:Total_Time, [1;CoMPenabled], 'k')
-%xlabel('TTI')
-%ylabel('CoMP Decision')
-%ylim([-2,2])
 
 elapsedTime = toc(startTime);
 fprintf('Simulation: total time = %1.1f sec.\n', elapsedTime);

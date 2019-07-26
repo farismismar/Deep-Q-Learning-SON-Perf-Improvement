@@ -1,125 +1,152 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Thu Jun  8 09:52:56 2017
+Created on Sat Mar  2 19:02:40 2019
 
 @author: farismismar
 """
 
 # Used from: https://keon.io/deep-q-learning/
+# https://github.com/keon/deep-q-learning/blob/master/dqn.py
+# https://github.com/eriklindernoren/ML-From-Scratch/blob/master/mlfromscratch/reinforcement_learning/deep_q_network.py
+
 # Check some more here: https://github.com/leimao/OpenAI_Gym_AI/tree/master/CartPole-v0/Deep_Q-Learning
-# https://github.com/keon/deep-q-learning/blob/master/ddqn.py
+# This adds a means to compute AverageQ as a sign of experience.
+
+# https://machinelearningmastery.com/display-deep-learning-model-training-history-in-keras/
+# https://github.com/dennybritz/reinforcement-learning/blob/master/DQN/dqn.py
 
 # Deep Q-learning Agent
 import random
 import numpy as np
-from collections import deque
+
 from keras.models import Sequential
 from keras.callbacks import History 
-from keras.layers import Dense
-from keras.optimizers import Adam
+from keras.layers import Dense, Flatten
+from keras.optimizers import SGD
 from keras import backend as K
 import tensorflow as tf
-import os
 
 class DQNLearningAgent:
-    def __init__(self, seed=0,
-                 learning_rate=0.2,
-                 discount_factor=1.0,
+    def __init__(self, seed,
+                 discount_factor=0.995,
                  exploration_rate=1.0,
-                 exploration_decay_rate=0.91, batch_size=32,
-                 state_size=5, action_size=3):
-
-        self.learning_rate = learning_rate          # alpha
-        self.discount_factor = discount_factor      # gamma
-        self.exploration_rate = exploration_rate    # epsilon
+                 exploration_decay_rate=0.999):
+                               
+        #####self.memory = deque(maxlen=2000)
+        self.gamma = discount_factor    # discount rate
+        self.exploration_rate = exploration_rate #/ exploration_decay_rate # exploration rate
         self.exploration_rate_min = 0.010
-        self.exploration_decay_rate = exploration_decay_rate # d
-        self.state = None
-        self.action = None
-        self.seed = seed
-        self.state_size = state_size
-        self.action_size = action_size
-        self.num_actions = action_size
-        
-        self.model = self._build_model()
-        self.target_model = self._build_model()
-#        self.update_target_model()
-        self.memory = deque(maxlen=2000)
-        self.batch_size = batch_size
-        
-        self._losses = []
-        self._history = History()
+        self.exploration_rate_decay = exploration_decay_rate
+        self.learning_rate = 0.01 # this is eta for SGD
 
+        self._state_size = 3 # unchange
+        self._action_size = 6 # unchange
+        
         # Add a few lines to caputre the seed for reproducibility.
-        # https://keras.io/getting-started/faq/#how-can-i-obtain-reproducible-results-using-keras-during-development
-        np.random.seed(seed)
-        random.seed(seed)
-        os.environ['PYTHONHASHSEED'] = '0'        
-        session_conf = tf.ConfigProto(intra_op_parallelism_threads=1, inter_op_parallelism_threads=1)
-        tf.set_random_seed(seed)        
-        sess = tf.Session(graph=tf.get_default_graph(), config=session_conf)
-        K.set_session(sess)
-
-    def _build_model(self):
-        # Neural Net for Deep Q learning Model from state_size |S| to action_size |A|
-        model = Sequential()
-        model.add(Dense(24, input_dim=self.state_size, activation='relu'))
-        model.add(Dense(24, activation='relu'))
-        model.add(Dense(self.action_size, activation='linear'))  # was linear?
-        model.compile(loss='mse',
-                      optimizer=Adam(lr=self.learning_rate))
-        return model
+        self.seed = seed
+        random.seed(self.seed)
+        np.random.seed(self.seed)
         
+        gpu_available = tf.test.is_gpu_available()
+        if (gpu_available == False):
+            print('WARNING: No GPU available.  Will continue with CPU.')
+
+        self.model = self._build_model()
+                
     def begin_episode(self, observation):
         # Reduce exploration over time.
-        self.exploration_rate *= self.exploration_decay_rate
+        self.exploration_rate *= self.exploration_rate_decay
         if (self.exploration_rate < self.exploration_rate_min):
             self.exploration_rate = self.exploration_rate_min
-    
-        return np.zeros(self.state_size) # the action of (nothing done yet).
+            
+        # return an action at random
+        action = random.randrange(self._action_size)
+
+        return action
+
+    def _build_model(self):
+        # Neural Net for Deep-Q learning Model
+        # This is a state-to-largest Q converter to find best action, basically
+        model = Sequential()
+        model.add(Dense(24, input_dim=self._state_size, activation='sigmoid'))
+        model.add(Dense(24, activation='sigmoid'))
+        model.add(Dense(self._action_size, activation='softmax'))
+        model.compile(loss='mse',
+                      optimizer=SGD(lr=self.learning_rate, decay=1e-6, momentum=0.9, nesterov=True))
         
-    def act(self, observation, reward=None):
-        if np.random.rand() <= self.exploration_rate:
-            return random.randrange(self.action_size)
-        observation = np.ones(self.state_size,dtype=int) * observation # force for MATLAB implicit conversion.
-#        observation = np.array(observation, dtype=int) # force for MATLAB implicit conversion.
-        act_values = self.model.predict(observation.reshape(1, self.state_size))
+        return model
+    
+    def _construct_training_set(self, replay):
+        # Select states and next states from replay memory
+        states = np.array([a[0] for a in replay])
+        new_states = np.array([a[3] for a in replay])
+
+        states = np.tile(states, (self._state_size, 1)).T
+        new_states = np.tile(new_states, (self._state_size, 1)).T
+
+        #np.savetxt("/Users/farismismar/Desktop/s.csv", states, fmt="%s", delimiter=",")
+        #np.savetxt("/Users/farismismar/Desktop/ns.csv", new_states, fmt="%s", delimiter=",")
+        
+        # Predict the expected Q of current state and new state using DQN
+        with tf.device('/gpu:0'):
+            Q = self.model.predict(states)
+            Q_new = self.model.predict(new_states)
+
+        replay_size = len(replay)
+        X = np.empty((replay_size, self._state_size))
+        y = np.empty((replay_size, self._action_size))
+        
+        # Construct training set
+        for i in range(replay_size):
+            state_r, action_r, reward_r, new_state_r, done_r = replay[i]
+            action_r = int(action_r) # I added this.
+            target = Q[i]
+            target[action_r] = reward_r
+            # If we're done the utility is simply the reward of executing action a in
+            # state s, otherwise we add the expected maximum future reward as well
+            if not done_r:
+                target[action_r] += self.gamma * np.amax(Q_new[i])
+
+            X[i] = state_r
+            y[i] = target
+
+        return X, y
+        
+    def remember(self, memory, state, action, reward, next_state, done):
+        memory.append((state, action, reward, next_state, done))
+        # Make sure we restrict memory size to specified limit
+        if len(memory) > 2000:
+            memory.pop(0)
+        
+        return memory
+
+    def act(self, state):
+        # Exploration/exploitation: choose a random action or select the best one.
+        if np.random.uniform(0, 1) <= self.exploration_rate:
+            return random.randrange(self._action_size)
+       
+        state = np.tile(state, (self._state_size, 1)).T
+        #states = states[:,0]
+        with tf.device('/gpu:0'):
+            act_values = self.model.predict(state)
+            
         return np.argmax(act_values[0])  # returns action
-
-    def replay(self, batch_size):
-        minibatch = random.sample(self.memory, batch_size)
-        for state, action, reward, next_state, done in minibatch:
-            observation = np.ones(self.state_size,dtype=int) * state # force for MATLAB implicit conversion.
-            target = self.model.predict(observation.reshape(1, self.state_size))
-            action = np.ones(self.action_size, dtype=int) * action # force for MATLAB conversion
-            action = action.reshape(1, self.action_size) 
-            if done:
-                action = action.astype(int)
-                target[0][action] = reward
-            else:
-                next_observation = np.ones(self.state_size,dtype=int) * next_state # force for MATLAB implicit conversion.
-                a = self.model.predict(next_observation.reshape(1, self.state_size))[0]
-                t = self.target_model.predict(next_observation.reshape(1, self.state_size))[0]
-                action = action.astype(int) # force for MATLAB implicit conversion.
-                target[0][action] = reward + self.discount_factor * t[np.argmax(a)]
-            #state = np.reshape(state, [1, self.state_size])
-            observation = np.ones(self.state_size,dtype=int) * state # force for MATLAB implicit conversion.
-            observation = observation.reshape(1, self.state_size)
-            #target =  np.ones(self.state_size,dtype=int) * target # force for MATLAB implicit conversion.
-            self.model.fit(observation, target, epochs=1, verbose=0, callbacks=[self._history])
-            self._losses.append(self._history.history['loss'][0])
-
-    def get_losses(self):
-        return self._losses
-
+    
+    def replay(self, memory, batch_size):
+        minibatch = random.sample(memory, batch_size)
+        
+        X, y = self._construct_training_set(minibatch)
+        with tf.device('/gpu:0'):
+            loss = self.model.train_on_batch(X, y)
+        
+        _q = np.mean(y)
+        return [_q, loss]
+    
     def update_target_model(self):
         # copy weights from model to target_model
         self.target_model.set_weights(self.model.get_weights())
         return
-        
-    def remember(self, state, action, reward, next_state, done):
-        self.memory.append((state, action, reward, next_state, done))
 
     def load(self, name):
         self.model.load_weights(name)
