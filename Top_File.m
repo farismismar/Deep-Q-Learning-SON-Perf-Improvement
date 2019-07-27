@@ -40,9 +40,9 @@ global live_network_alarms;
 startTime = tic;
 
 Total_Time = 20; % TTIs
-live_network_alarms = true; % yes generate alarms in the network
+live_network_alarms = true; % yes generate alarms in the network.  No will be upper bound.
 
-q = 10; % UEs per cell
+q = 20; % UEs per cell
 enable_intelligent_SON = true;
 enable_fcfs_handling = false;
 
@@ -77,7 +77,7 @@ alarm_register = zeros(1,action_size);
 R_max = 5;
 R_min = -2;
 
-EPISODE_MAX = 10000;  % do not change to less.  0.01 will not be achieved.
+EPISODE_MAX = 1000;  % do not change to less.  0.01 will not be achieved.
 
 mod = py.importlib.import_module('main'); % a pointer to main.py
 py.importlib.reload(mod);
@@ -151,18 +151,22 @@ for fn = fieldnames(LTE_config)'
     LTE_config_reset.(fn{1}) = LTE_config.(fn{1});
 end
 
-if enable_intelligent_SON == true && enable_fcfs_handling == false
+%%%%%%%%%%%%%
+if enable_intelligent_SON == true
     py.main.set_environment(state_size,action_size)
     losses = [];
     Q_value = [];
     best_episode = 0;
     best_reward = -1;
-    for episode_ = 1:EPISODE_MAX
+end
+
+for episode_ = 1:EPISODE_MAX
+    if enable_intelligent_SON == true
         py.main.env_reset_wrapper();
-        
+
         epsilon = py.main.agent_get_exploration_rate_wrapper();
         fprintf('Episode %d/%d.  Current epislon value is %3f:\n', episode_, EPISODE_MAX, epsilon);
-    
+
         % Start afresh...
         % This is env.reset()
         alarm_register = zeros(1,action_size);
@@ -171,21 +175,24 @@ if enable_intelligent_SON == true && enable_fcfs_handling == false
         Alarms = [];
         losses = [];
         Q_value = [];
-        
+
         action = -1;
         Actions = [action]; %zeros(1,action_size);
         Rewards = [0];
-        
+
         py.main.agent_begin_episode_wrapper(state);  % is always 0
-        
-        output_results_file = LTE_sim_main(LTE_config); % This interacts with the  env
+     end  % if SON 
+
+    output_results_file = LTE_sim_main(LTE_config); % This interacts with the  env
+
+    if enable_intelligent_SON == true    
         successful = (sum(alarm_register) == 0);
         if successful
             total_reward = Rewards(end);
             total_reward = total_reward + R_max;
         end
         Rewards = [Rewards(1:end-1), total_reward];
-        
+
         if (total_reward > best_reward)
             best_episode = episode_;
             best_reward = total_reward;
@@ -200,13 +207,13 @@ if enable_intelligent_SON == true && enable_fcfs_handling == false
         fprintf('\n');
         fprintf('Count of unresolved alarms: ')
         fprintf('%d,', Alarms)
-        
+
         loss_z = mean(losses);
         q_z = mean(Q_value);
         fprintf('\n\n');
         fprintf('The loss in this episode was %3f.\n', loss_z);
         fprintf('The Q-value in this episode was %3f.\n', q_z);
-        
+
         fid = fopen(sprintf('actions_episode_%d.csv',episode_), 'wt');
         if fid ~= -1
             fprintf(fid, 'Episode:,%d', episode_);
@@ -220,23 +227,21 @@ if enable_intelligent_SON == true && enable_fcfs_handling == false
             fprintf(fid, '%5f,', Q_value);
             fclose(fid);
         end
-        
+
         if (sum(Alarms) == 0) || isnan(loss_z)
             break
         end
-    end 
-    
-    fid = fopen('best_episode.csv', 'wt');
-    if fid ~= -1
-        fprintf(fid, 'Best episode:, %d\n', best_episode);
-        fprintf(fid, 'Best reward:, %6f\n', total_reward);
-        fclose(fid);
-    end
-else
-    output_results_file = LTE_sim_main(LTE_config); % This is the main line... do not re run it unless you know what you are doing.
-end
 
-%%%%%%%%%%%%%
+        fid = fopen('best_episode.csv', 'wt');
+        if fid ~= -1
+            fprintf(fid, 'Best episode:, %d\n', best_episode);
+            fprintf(fid, 'Best reward:, %6f\n', total_reward);
+            fclose(fid);
+        end
+    end % enable_SON
+end % for episode
+
+%%%%%%
 simulation_data                   = load(output_results_file);
 % TODO: Try to find where the throughput and the SE CDF is and port it here.
 
