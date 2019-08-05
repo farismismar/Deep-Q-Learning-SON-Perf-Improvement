@@ -31,7 +31,7 @@ class DQNLearningAgent:
     def __init__(self, seed,
                  discount_factor=0.995,
                  exploration_rate=1.0,
-                 exploration_decay_rate=0.999):
+                 exploration_decay_rate=0.98):
                                
         #####self.memory = deque(maxlen=2000)
         self.gamma = discount_factor    # discount rate

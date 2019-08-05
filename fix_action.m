@@ -17,8 +17,8 @@ function cleared = fix_action(eNodeBs, serv_cell, action)
          end
     elseif (action == 2) && (alarm_register(2) > 0)
         % find the correct azimuth
-        azimuths = [30, 150, 270];
-        corr_azimuth = azimuths(serv_cell - 12); % since we are doing cells 13, 14, 15.
+        azimuths = [90, 210, 330]; %[30, 150, 270];
+        corr_azimuth = azimuths(serv_cell);% - 12); % since we are doing cells 13, 14, 15.
         if (eNodeBs(serv_cell).azimuth ~= corr_azimuth)
             eNodeBs(serv_cell).azimuth = corr_azimuth;
             fprintf('CLEARED: Cell %d azimuth has changed back to %d.\n', serv_cell, corr_azimuth)

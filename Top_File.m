@@ -32,26 +32,23 @@ clear global;
 clear classes;
 
 global enable_intelligent_SON;
-global enable_fcfs_handling;
+%global enable_fcfs_handling;
 global Total_Time;
 global q;
 global live_network_alarms;
 
 startTime = tic;
 
-Total_Time = 20; % TTIs
+Total_Time = 30; % TTIs
 live_network_alarms = true; % yes generate alarms in the network.  No will be upper bound.
 
-q = 20; % UEs per cell
-enable_intelligent_SON = true;
-enable_fcfs_handling = false;
+q = 15; % UEs per cell
+enable_intelligent_SON = false;
 
 % Truth table
-% enable_intelligent_SON, enable_fcfs_handling
-% F, F = Random  
-% F, T = FCFS  /  FIFO
-% T, F = DQN 
-% T, T = unused will yield error.
+% enable_intelligent_SON
+% F,  Random  
+% T = DQN 
 
 global total_reward;
 global R_min;
@@ -77,7 +74,7 @@ alarm_register = zeros(1,action_size);
 R_max = 5;
 R_min = -2;
 
-EPISODE_MAX = 1000;  % do not change to less.  0.01 will not be achieved.
+EPISODE_MAX = 250;  % do not change to less.  0.01 will not be achieved.
 
 mod = py.importlib.import_module('main'); % a pointer to main.py
 py.importlib.reload(mod);
@@ -108,9 +105,9 @@ LTE_config.RandStreamSeed             = seed;
 LTE_config.scheduler                  = 'prop fair Sun'; 
 LTE_config.network_source             = 'generated'; % hexagonals
 LTE_config.network_geometry           = 'regular_hexagonal_grid';
-LTE_config.nr_eNodeB_rings            = 1; 
+LTE_config.nr_eNodeB_rings            = 0; 
 LTE_config.inter_eNodeB_distance      = 200; % 200m apart.
-LTE_config.antenna_azimuth_offsett    = 30;  % Changes the reference of the azimuth at 0 degrees.
+LTE_config.antenna_azimuth_offsett    = 90;  % Changes the reference of the azimuth at 0 degrees.
 LTE_config.macroscopic_pathloss_model = 'cost231'; % Good for HN and 2100 MHz simulations.
 LTE_config.macroscopic_pathloss_model_settings.environment = 'urban_macro'; %for cost231.
 LTE_config.shadow_fading_type         = 'claussen';
@@ -152,21 +149,19 @@ for fn = fieldnames(LTE_config)'
 end
 
 %%%%%%%%%%%%%
-if enable_intelligent_SON == true
+if enable_intelligent_SON == true% && enable_fcfs_handling == false
     py.main.set_environment(state_size,action_size)
     losses = [];
     Q_value = [];
     best_episode = 0;
     best_reward = -1;
-end
-
-for episode_ = 1:EPISODE_MAX
-    if enable_intelligent_SON == true
+    
+    for episode_ = 1:EPISODE_MAX
         py.main.env_reset_wrapper();
-
+        
         epsilon = py.main.agent_get_exploration_rate_wrapper();
         fprintf('Episode %d/%d.  Current epislon value is %3f:\n', episode_, EPISODE_MAX, epsilon);
-
+    
         % Start afresh...
         % This is env.reset()
         alarm_register = zeros(1,action_size);
@@ -175,29 +170,26 @@ for episode_ = 1:EPISODE_MAX
         Alarms = [];
         losses = [];
         Q_value = [];
-
+        
         action = -1;
         Actions = [action]; %zeros(1,action_size);
         Rewards = [0];
-
+        
         py.main.agent_begin_episode_wrapper(state);  % is always 0
-     end  % if SON 
-
-    output_results_file = LTE_sim_main(LTE_config); % This interacts with the  env
-
-    if enable_intelligent_SON == true    
+        
+        output_results_file = LTE_sim_main(LTE_config); % This interacts with the  env
         successful = (sum(alarm_register) == 0);
         if successful
             total_reward = Rewards(end);
             total_reward = total_reward + R_max;
         end
         Rewards = [Rewards(1:end-1), total_reward];
-
+        
         if (total_reward > best_reward)
             best_episode = episode_;
             best_reward = total_reward;
         end
-        %close all;
+        close all;
         fprintf('The list of actions/rewards for episode %d:\n', episode_);
         fprintf('Actions: ')
         fprintf('%d,', Actions)
@@ -207,13 +199,13 @@ for episode_ = 1:EPISODE_MAX
         fprintf('\n');
         fprintf('Count of unresolved alarms: ')
         fprintf('%d,', Alarms)
-
+        
         loss_z = mean(losses);
         q_z = mean(Q_value);
         fprintf('\n\n');
         fprintf('The loss in this episode was %3f.\n', loss_z);
         fprintf('The Q-value in this episode was %3f.\n', q_z);
-
+        
         fid = fopen(sprintf('actions_episode_%d.csv',episode_), 'wt');
         if fid ~= -1
             fprintf(fid, 'Episode:,%d', episode_);
@@ -227,19 +219,21 @@ for episode_ = 1:EPISODE_MAX
             fprintf(fid, '%5f,', Q_value);
             fclose(fid);
         end
-
+        
         if (sum(Alarms) == 0) || isnan(loss_z)
             break
         end
-
-        fid = fopen('best_episode.csv', 'wt');
-        if fid ~= -1
-            fprintf(fid, 'Best episode:, %d\n', best_episode);
-            fprintf(fid, 'Best reward:, %6f\n', total_reward);
-            fclose(fid);
-        end
-    end % enable_SON
-end % for episode
+    end 
+    
+    fid = fopen('best_episode.csv', 'wt');
+    if fid ~= -1
+        fprintf(fid, 'Best episode:, %d\n', best_episode);
+        fprintf(fid, 'Best reward:, %6f\n', total_reward);
+        fclose(fid);
+    end
+else
+    output_results_file = LTE_sim_main(LTE_config); % This is the main line... do not re run it unless you know what you are doing.
+end
 
 %%%%%%
 simulation_data                   = load(output_results_file);

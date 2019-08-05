@@ -34,6 +34,8 @@ agent = None
 
 # This is the entry point to the simulation
 def env_reset_wrapper():
+    random.seed(seed)
+    np.random.seed(seed)
     global env
     global agent 
     state = env.reset()
