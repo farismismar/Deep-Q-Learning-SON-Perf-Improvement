@@ -100,7 +100,7 @@ def agent_remember_wrapper(state, action, reward, next_state, done):
     action = int(action[0])
     reward = int(reward)
     done = int(done)
-    m = np.array([state, action, reward, next_state, done])
+    #m = np.array([state, action, reward, next_state, done])
 
     #f=open('/Users/farismismar/Desktop/memory.csv','ab')
     #np.savetxt(f, m.T, fmt="%s", delimiter=",")
