@@ -10,9 +10,9 @@ import random
 import numpy as np
 from collections import deque
 
-import matplotlib.pyplot as plt
-from matplotlib import rc
-import matplotlib.ticker as tick
+#import matplotlib.pyplot as plt
+#from matplotlib import rc
+#import matplotlib.ticker as tick
 
 memory = deque(maxlen=2000)
 
