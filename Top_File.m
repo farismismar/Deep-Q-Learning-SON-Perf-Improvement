@@ -21,6 +21,11 @@
 % Then run MATLAB from Terminal.
 % /Applications/MATLAB_R2018a.app/bin/matlab
 
+% Another error: Reason: Incompatible library version: _imaging.cpython-36m-darwin.so requires version 10.0.0 or later, but libtiff.5.dylib provides version 6.0.0
+% Solution: Quit MATLAB.  Uninstall libtiff from brew (or pip): brew uninstall imagemagick little-cms2 openjpeg libtiff
+% and delete % location: rm -rf /usr/local/Cellar/libtiff
+% Then re-run matlab
+  
 % First time run the random algorithm.  Do not start by running the
 % intelligent SON.
 % Change folder do not add to path.
@@ -42,8 +47,8 @@ startTime = tic;
 Total_Time = 30; % TTIs
 live_network_alarms = true; % yes generate alarms in the network.  No will be upper bound.
 
-q = 15; % UEs per cell
-enable_intelligent_SON = false;
+q = 5; % UEs per cell
+enable_intelligent_SON = true;
 
 % Truth table
 % enable_intelligent_SON
@@ -105,7 +110,7 @@ LTE_config.RandStreamSeed             = seed;
 LTE_config.scheduler                  = 'prop fair Sun'; 
 LTE_config.network_source             = 'generated'; % hexagonals
 LTE_config.network_geometry           = 'regular_hexagonal_grid';
-LTE_config.nr_eNodeB_rings            = 0; 
+LTE_config.nr_eNodeB_rings            = 1; 
 LTE_config.inter_eNodeB_distance      = 200; % 200m apart.
 LTE_config.antenna_azimuth_offsett    = 90;  % Changes the reference of the azimuth at 0 degrees.
 LTE_config.macroscopic_pathloss_model = 'cost231'; % Good for HN and 2100 MHz simulations.
