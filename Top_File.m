@@ -44,16 +44,17 @@ global live_network_alarms;
 
 startTime = tic;
 
-Total_Time = 30; % TTIs
+Total_Time = 5; % TTIs
 live_network_alarms = true; % yes generate alarms in the network.  No will be upper bound.
 
 q = 5; % UEs per cell
-enable_intelligent_SON = true;
+enable_intelligent_SON = 1;
 
 % Truth table
 % enable_intelligent_SON
-% F,  Random  
-% T = DQN 
+% 0,  Random  
+% 1 = DQN 
+% 2 = FIFO
 
 global total_reward;
 global R_min;
@@ -154,7 +155,7 @@ for fn = fieldnames(LTE_config)'
 end
 
 %%%%%%%%%%%%%
-if enable_intelligent_SON == true% && enable_fcfs_handling == false
+if enable_intelligent_SON == 1
     py.main.set_environment(state_size,action_size)
     losses = [];
     Q_value = [];
@@ -225,7 +226,7 @@ if enable_intelligent_SON == true% && enable_fcfs_handling == false
             fclose(fid);
         end
         
-        if (sum(Alarms) == 0) || isnan(loss_z)
+        if (sum(Alarms) == 0) % || isnan(loss_z)
             break
         end
     end 
